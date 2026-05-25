@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "EQxGp1SWVs0=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\yjc03\\Documents\\Codex\\TheGame\\TheGame.fsproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\yjc03\\.nuget\\packages\\fsharp.core\\10.0.103\\fsharp.core.10.0.103.nupkg.sha512"
+  ],
+  "logs": []
+}

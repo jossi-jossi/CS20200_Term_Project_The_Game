@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<linker>
+  <assembly fullname="TheGame">
+    <resource name="FSharpSignatureData.TheGame" action="remove"></resource>
+    <resource name="FSharpSignatureCompressedData.TheGame" action="remove"></resource>
+    <resource name="FSharpSignatureDataB.TheGame" action="remove"></resource>
+    <resource name="FSharpSignatureCompressedDataB.TheGame" action="remove"></resource>
+    <resource name="FSharpOptimizationData.TheGame" action="remove"></resource>
+    <resource name="FSharpOptimizationCompressedData.TheGame" action="remove"></resource>
+    <resource name="FSharpOptimizationDataB.TheGame" action="remove"></resource>
+    <resource name="FSharpOptimizationCompressedDataB.TheGame" action="remove"></resource>
+    <resource name="FSharpOptimizationInfo.TheGame" action="remove"></resource>
+    <resource name="FSharpSignatureInfo.TheGame" action="remove"></resource>
+  </assembly>
+</linker>
