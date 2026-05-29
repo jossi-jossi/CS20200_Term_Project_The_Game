@@ -10,10 +10,6 @@ module ConsoleUi =
         let line = Console.ReadLine()
         if isNull line then "" else line.Trim()
 
-    let private waitForEnter () =
-        Console.Write("Press Enter to continue...")
-        Console.ReadLine() |> ignore
-
     /// clear screen for game state updates
     let private clearScreen () =
         try
@@ -125,27 +121,38 @@ module ConsoleUi =
             | (true, card), Some stack -> Ok(card, stack)
             | _ -> Error "Type a card number and one of A, B, C, or D."
 
-    /// asks the user if it wants to comment to computer.
-    /// The user may enter several stack labels, separated by spaces or commas.
-    /// Returns the stacks to ask the computer to avoid.
-    let private askAvoidStacks () =
-        let text = readTrimmed "Comment to computer? Type stack letters like A C to ask it to avoid them, or press Enter > "
-
+    let private parseStackList (text: string) =
         if String.IsNullOrWhiteSpace text then
             []
         else
             /// Accepts input such as "A C", "A,C", or "a b d".
             let parts = text.Split([| ' '; '\t'; ',' |], StringSplitOptions.RemoveEmptyEntries)
-            let parsed = parts |> Array.choose StackId.tryParse |> Array.toList |> List.distinct
+            parts |> Array.choose StackId.tryParse |> Array.toList |> List.distinct
 
-            if parsed.IsEmpty then
-                printfn "Comment ignored. Use only A, B, C, or D."
-                []
-            else
-                /// Echo the cooperative comment without revealing exact cards.
-                let stackText = parsed |> List.map StackId.name |> String.concat ", "
-                printfn "You: Could you not use stack(s) %s? I have really good cards." stackText
-                parsed
+    /// asks the user if it wants to comment to computer.
+    /// The user may enter several stack labels, separated by spaces or commas.
+    /// Returns (stacks to avoid, stacks to suggest).
+    let private askComputerComments () =
+        let avoidText = readTrimmed "Ask computer to avoid stacks? Type stack letters like A C, or press Enter > "
+        let avoidStacks = parseStackList avoidText
+
+        if not (String.IsNullOrWhiteSpace avoidText) && avoidStacks.IsEmpty then
+            printfn "Avoid comment ignored. Use only A, B, C, or D."
+        elif not avoidStacks.IsEmpty then
+            /// Echo the cooperative comment without revealing exact cards.
+            let stackText = avoidStacks |> List.map StackId.name |> String.concat ", "
+            printfn "You: Could you not use stack(s) %s? I have really good cards." stackText
+
+        let suggestText = readTrimmed "Suggest stacks for computer to use? Type stack letters like A C, or press Enter > "
+        let suggestStacks = parseStackList suggestText
+
+        if not (String.IsNullOrWhiteSpace suggestText) && suggestStacks.IsEmpty then
+            printfn "Suggest comment ignored. Use only A, B, C, or D."
+        elif not suggestStacks.IsEmpty then
+            let stackText = suggestStacks |> List.map StackId.name |> String.concat ", "
+            printfn "You: I suggest using stacks %s." stackText
+
+        avoidStacks, suggestStacks
 
     /// Returns true when the game can continue, otherwise false after printing the result.
     let private printStatusAndCanContinue game =
@@ -166,6 +173,7 @@ module ConsoleUi =
             let required = Rules.minCardsRequiredAtTurnStart game
             let startMessages =
                 [ Computer.commentForUserTurn game
+                  Computer.suggestForUserTurn game
                   Some(sprintf "Your turn. You must play at least %i card(s)." required) ]
                 |> List.choose id
 
@@ -202,17 +210,18 @@ module ConsoleUi =
                                 printfn "%s" message
                                 loop currentGame played
                             | Ok(nextGame, _, quality) ->
-                                let reaction =
-                                    Computer.commentForUserTurn nextGame
-                                    |> Option.orElseWith (fun () ->
-                                        match currentGame.Mode with
-                                        | WithComputer -> Some(Computer.feedback quality)
-                                        | SinglePlayer -> None)
+                                let computerMessages =
+                                    match currentGame.Mode with
+                                    | WithComputer ->
+                                        [ Some(Computer.feedback quality) 
+                                          Computer.commentForUserTurn nextGame
+                                          Computer.suggestForUserTurn nextGame ]
+                                        |> List.choose id
+                                    | SinglePlayer -> []
 
                                 let messages =
-                                    [ Some(sprintf "You placed a card on %s." (StackId.name stack))
-                                      reaction ]
-                                    |> List.choose id
+                                    sprintf "You placed a card on %s." (StackId.name stack)
+                                    :: computerMessages
 
                                 showScreen nextGame messages
                                 loop nextGame (played + 1)
@@ -233,7 +242,7 @@ module ConsoleUi =
             let rec loop currentGame played lastMoveMessage =
                 /// (1) has played minimum cards required
                 /// (2) it doesn't have sufficiently good cards left
-                if played >= required && Computer.chooseExtraMove [] currentGame |> Option.isNone then
+                if played >= required && Computer.chooseExtraMove [] [] currentGame |> Option.isNone then
                     match lastMoveMessage with
                     | Some message -> showScreen currentGame [ message ]
                     | None -> ()
@@ -241,18 +250,19 @@ module ConsoleUi =
                 else
                     /// The avoid list may contain several stacks; the computer strategy
                     /// penalizes all of them when choosing the next move.
-                    let avoidStacks = askAvoidStacks ()
+                    /// The suggest list gives all suggested stacks an extra score bonus.
+                    let avoidStacks, suggestStacks = askComputerComments ()
                     let requiredRemaining = max 0 (required - played)
                     let selectedMove =
                         /// necessary moves
                         if requiredRemaining > 0 then
-                            match Computer.chooseMoves requiredRemaining avoidStacks currentGame with
+                            match Computer.chooseMoves requiredRemaining avoidStacks suggestStacks currentGame with
                             | Error message -> Error message
                             | Ok(_, []) -> Error "Computer cannot make the required move."
                             | Ok(_, nextMove :: _) -> Ok nextMove
                         /// extra moves
                         else
-                            match Computer.chooseExtraMove avoidStacks currentGame with
+                            match Computer.chooseExtraMove avoidStacks suggestStacks currentGame with
                             | Some nextMove -> Ok nextMove
                             | None -> Error "Computer chooses to stop; no efficient extra move is available."
 
@@ -277,7 +287,6 @@ module ConsoleUi =
                         | Ok(afterMove, move, _) ->
                             let moveMessage = sprintf "Computer has placed a card on %s." (StackId.name move.Stack)
                             showScreen afterMove [ moveMessage ]
-                            waitForEnter ()
                             loop afterMove (played + 1) (Some moveMessage)
 
             loop game 0 None

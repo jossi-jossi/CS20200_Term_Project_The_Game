@@ -212,6 +212,26 @@ type GameStatus =
 
 ---
 
+## Use of LLM
+
+This project was developed with assistance from an LLM. The requested help included:
+
+- Creating the initial F# console implementation of *The Game*.
+- Separating the code into modules for domain types, rules, computer strategy, console UI, and program entry point.
+- Implementing single-player mode and with-computer mode.
+- Implementing card dealing, stack legality, reverse-10 moves, drawing, turn switching, win/loss detection, and replay.
+- Improving the terminal UI so the board is redrawn clearly with card-like stack displays.
+- Adding cooperative computer comments for avoiding stacks and suggesting stacks.
+- Adding explanatory comments throughout the source files.
+- Converting the requirements document to Markdown and creating this README.
+
+### Manual Corrections and Reprompting
+
+- The board display in the terminal needed some manual modifications.
+- Most reprompts were required not because the LLM failed to understand the original prompt, but because the original prompt itself was unclear and lacked sufficient detail.
+
+---
+
 ## Rules Summary
 
 - Cards are numbered from 2 to 99.
