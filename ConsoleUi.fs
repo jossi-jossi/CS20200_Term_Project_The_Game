@@ -52,6 +52,9 @@ module ConsoleUi =
 
         printfn ""
         printfn "Your hand: %s" (game.User.Hand |> List.map string |> String.concat " ")
+        match game.Computer with
+        | Some computer -> printfn "Computer hand: %i card(s)" computer.Hand.Length
+        | None -> ()
 
         match messages with
         | [] -> ()
@@ -166,16 +169,17 @@ module ConsoleUi =
         | InProgress -> true
 
     /// Returns the game state after the user's turn finishes or the game is lost.
-    let rec private userTurn game =
+    let rec private userTurn entryMessages game =
         if not (printStatusAndCanContinue game) then
             game
         else
             let required = Rules.minCardsRequiredAtTurnStart game
             let startMessages =
-                [ Computer.commentForUserTurn game
-                  Computer.suggestForUserTurn game
-                  Some(sprintf "Your turn. You must play at least %i card(s)." required) ]
-                |> List.choose id
+                entryMessages
+                @ ([ Computer.commentForUserTurn game
+                     Computer.suggestForUserTurn game
+                     Some(sprintf "Your turn. You must play at least %i card(s)." required) ]
+                   |> List.choose id)
 
             showScreen game startMessages
 
@@ -229,11 +233,12 @@ module ConsoleUi =
             loop game 0
 
     /// for computer's turn
-    /// Returns the game state after the computer's turn finishes or the game is lost.
+    /// Returns the game state after the computer's turn finishes or the game is lost,
+    /// plus messages that should stay visible on the next screen.
     and private computerTurn game =
         /// no more cards can be placed -> returns the input game state 
         if not (printStatusAndCanContinue game) then
-            game
+            game, []
         else
             /// minimum cards required to play at the turn
             let required = Rules.minCardsRequiredAtTurnStart game
@@ -243,10 +248,13 @@ module ConsoleUi =
                 /// (1) has played minimum cards required
                 /// (2) it doesn't have sufficiently good cards left
                 if played >= required && Computer.chooseExtraMove [] [] currentGame |> Option.isNone then
-                    match lastMoveMessage with
-                    | Some message -> showScreen currentGame [ message ]
-                    | None -> ()
-                    Rules.finishTurn played currentGame
+                    let messages = lastMoveMessage |> Option.toList
+
+                    match messages with
+                    | [] -> ()
+                    | _ -> showScreen currentGame messages
+
+                    Rules.finishTurn played currentGame, messages
                 else
                     /// The avoid list may contain several stacks; the computer strategy
                     /// penalizes all of them when choosing the next move.
@@ -264,26 +272,26 @@ module ConsoleUi =
                         else
                             match Computer.chooseExtraMove avoidStacks suggestStacks currentGame with
                             | Some nextMove -> Ok nextMove
-                            | None -> Error "Computer chooses to stop; no efficient extra move is available."
+                            | None -> Error ""
 
                     match selectedMove with
                     | Error message ->
                         if requiredRemaining > 0 then
                             showScreen currentGame [ sprintf "%s The players lose." message ]
-                            currentGame
+                            currentGame, []
                         else
                             let messages =
                                 [ lastMoveMessage
-                                  Some message ]
+                                  if String.IsNullOrWhiteSpace message then None else Some message ]
                                 |> List.choose id
 
                             showScreen currentGame messages
-                            Rules.finishTurn played currentGame
+                            Rules.finishTurn played currentGame, messages
                     | Ok nextMove ->
                         match Rules.tryPlayCard nextMove.Card nextMove.Stack currentGame with
                         | Error message ->
                             showScreen currentGame [ sprintf "%s The players lose." message ]
-                            currentGame
+                            currentGame, []
                         | Ok(afterMove, move, _) ->
                             let moveMessage = sprintf "Computer has placed a card on %s." (StackId.name move.Stack)
                             showScreen afterMove [ moveMessage ]
@@ -295,27 +303,35 @@ module ConsoleUi =
         let rng = Random()
 
         /// Plays one game until win/loss. The replay loop below can start more.
-        let rec gameLoop game =
-            if printStatusAndCanContinue game then
-                let nextGame =
-                    match game.Current with
-                    | User -> userTurn game
-                    | Computer -> computerTurn game
+        let rec gameLoop pendingMessages game =
+            let activeGame = Rules.normalizeCurrentPlayer game
 
-                if obj.ReferenceEquals(nextGame, game) then
+            if printStatusAndCanContinue activeGame then
+                let nextGame, nextMessages =
+                    match activeGame.Current with
+                    | User -> userTurn pendingMessages activeGame, []
+                    | Computer -> computerTurn activeGame
+
+                if nextGame = activeGame then
                     ()
                 else
-                    gameLoop nextGame
+                    gameLoop nextMessages nextGame
 
         /// Outer loop: after one game ends, ask whether to start a new game.
         let rec replayLoop () =
             clearScreen ()
             printfn "The Game: Play... as long as you can!"
             let mode = chooseMode ()
-            let firstPlayer = chooseFirstPlayer mode
-            let initialGame = Rules.newGame mode firstPlayer rng
+            let initialGame =
+                match mode with
+                | SinglePlayer -> Rules.newGame SinglePlayer User rng
+                | WithComputer ->
+                    let previewGame = Rules.newGame WithComputer User rng
+                    showScreen previewGame [ "Check your cards, then choose who starts first." ]
+                    let firstPlayer = chooseFirstPlayer WithComputer
+                    { previewGame with Current = firstPlayer }
 
-            gameLoop initialGame
+            gameLoop [] initialGame
 
             if chooseReplay () then
                 replayLoop ()

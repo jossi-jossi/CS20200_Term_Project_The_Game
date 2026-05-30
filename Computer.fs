@@ -3,7 +3,7 @@ namespace TheGame
 module Computer =
     // Avoid requests are cooperative suggestions, but a large penalty makes
     // the computer respect all requested stacks whenever another legal path exists.
-    let private avoidStackPenalty = 30
+    let private avoidStackPenalty = 20
 
     // Suggested stacks get a negative score adjustment, so the computer is
     // more likely to use them without being forced to use them.
